@@ -1,0 +1,33 @@
+---
+title: "Intro to Quarto"
+format: html
+bibliography: references.bib
+---
+
+## Header level 2
+
+#### Header level 4
+
+**This is bold text**
+
+*this is italic text*
+
+| Col1   | Col2        | Col3 |
+|--------|-------------|------|
+| item 1 | description |      |
+| item 2 |             |      |
+| item 3 |             |      |
+
+This is a very important fact [@oke2020]
+
+
+## WOrking with R code in Quarto
+
+```{r}
+x <- 4*8
+
+hights_ft <- c(5.2, 6.0, 5.7)
+
+
+```
+
