@@ -1,0 +1,101 @@
+---
+title: "R Practice: Tidy Data and Joins"
+format: html
+---
+
+```{r}
+library(readr)
+library(dplyr)
+library(lubridate)
+```
+
+## Data Sources
+
+### Read in data sources
+```{r}
+bird_observations <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-cap.256.10&entityid=53edaa7a0e083013d9bf20322db1780e")
+surveys <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-cap.256.10&entityid=b2466fa5cb5ed7ee1ea91398fc291c59")
+sites <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-cap.256.10&entityid=81bf72420e69077097fb0790dcdc63a6")
+taxalist <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-cap.256.10&entityid=58f863b7e3066e68536a9cacdc7bd58e")
+
+```
+
+```{r}
+# returns dimensions of the dataframe by number of rows and number of cols
+dim(bird_observations)
+
+# returns the top six rows of the dataframe
+head(bird_observations)
+
+# returns all the columns and some info about the cols
+glimpse(bird_observations)
+
+# similar to glimpse but returns some summary statistics about the cols
+summary(bird_observations)
+
+# returns column names 
+names(bird_observations)
+
+# returns unique values in a column. In this case we can see all the different bird species IDs
+unique(bird_observations$species_id)
+```
+## subset of bird observations
+```{r}
+bird_subset <- bird_observations %>% 
+  filter(species_id %in% c("BHCO", "RWBL")) %>% 
+  filter(site_id %in% c("LI-W", "NU-C"))
+```
+## left_join() to merge bird_subset
+```{r}
+birds_left_join <- bird_subset %>% 
+  left_join(y = sites, by = "site_id")
+```
+## full_join() to merge bird_subset and sites table
+```{r}
+birds_full_join <- bird_subset %>% 
+  full_join(y = sites, by = "site_id")
+```
+## inner_join() to merge bird_subset and taxalist
+```{r}
+birds_inner_join <- bird_subset %>% 
+  inner_join(y = taxalist, by = "species_id")
+```
+## left_join() to merge bird_subset and taxalist
+```{r}
+birds_inner_left <- bird_subset %>% 
+  left_join(y = taxalist, by = "species_id")
+```
+### Exercise 2
+
+## Rename notes to bird_obs_notes
+```{r}
+bird_observations <- bird_observations %>% 
+  rename(bird_obs_notes = notes)
+```
+## Subset of all observations with joins
+```{r}
+bird_obs_sub <- bird_observations %>% 
+  full_join(y = taxalist, by = "species_id") %>% 
+  full_join(y = sites, by = "site_id") %>% 
+  full_join(y = surveys, by = c("site_id", "survey_id")) %>% 
+  select(survey_date, common_name, park_name, bird_count, observer)
+
+```
+## Identify unique values
+```{r}
+unique(bird_obs_sub$observer)
+```
+## Update format of Josh Burns
+```{r}
+bird_obs_sub <- bird_obs_sub %>% 
+  mutate(observer = if_else(condition = observer =="Josh Burns",
+                          true = "J. Burns",
+                          false = observer))
+unique(bird_obs_sub$observer)
+```
+
+
+
+
+
+
