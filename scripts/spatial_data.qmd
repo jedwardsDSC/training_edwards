@@ -1,0 +1,297 @@
+---
+title: "Spatial Data"
+format: html
+---
+
+## About the Data
+
+```{r}
+# Set up
+knb_url <- "https://dev.nceas.ucsb.edu/knb/d1/mn/v2/object/urn%3Auuid%3Aaceaecb2-1ce0-4d41-a839-d3607d32bb58"
+
+download.file(url = knb_url, destfile = 'shapefile_demo_data.zip')
+
+unzip('shapefile_demo_data.zip', exdir = 'data')
+
+file.remove('shapefile_demo_data.zip')
+```
+
+```{r}
+# Call R Packages
+library(readr)
+library(sf)
+library(ggplot2)
+library(leaflet)
+library(scales)
+library(ggspatial)
+library(dplyr)
+
+```
+
+## Explore the Data
+
+```{r}
+# read in shapefile using read_sf()
+ak_regions <- read_sf("data/ak_regions_simp.shp")
+```
+
+```{r}
+# quick plot
+plot(ak_regions)
+```
+
+```{r}
+class(ak_regions)
+```
+
+```{r}
+head(ak_regions)
+```
+
+```{r}
+glimpse(ak_regions)
+```
+
+### CRS
+```{r}
+st_crs(ak_regions)
+```
+
+```{r}
+ak_regions_3338 <- ak_regions %>% 
+  # transform to Alaska Albers CRS
+  st_transform(crs = 3338)
+
+st_crs(ak_regions_3338)
+```
+
+```{r}
+plot(ak_regions_3338)
+```
+
+## sf & the Tidyverse
+```{r}
+colnames(ak_regions_3338)
+
+```
+
+```{r}
+ak_regions_3338 %>% 
+  select(region)
+```
+
+```{r}
+unique(ak_regions_3338$region)
+```
+
+```{r}
+ak_regions_3338 %>% 
+  filter(region == "Southeast")
+```
+
+## Spatial Joins
+```{r}
+pop <- read_csv("data/alaska_population.csv")
+
+```
+
+```{r}
+# convert pop data to sf object
+pop_4326 <- st_as_sf(pop,
+                     coords = c('lng', 'lat'),
+                     # set as WGS84
+                     crs = 4326,
+                     # ensures that we retain our original lat lng columns
+                     remove = F)
+
+head(pop_4326)
+```
+
+### Join pop data with Alaska
+```{r}
+# project pop data into Alaska Albers
+pop_3338 <- st_transform(pop_4326, 
+                         crs = 3338)
+# find what region each city falls within
+pop_joined <- st_join(pop_3338, 
+                      ak_regions_3338, 
+                      join = st_within)
+
+head(pop_joined)
+```
+
+### Calculate the total population by region
+```{r}
+pop_region <- pop_joined %>%
+  # get rid of sticky geometry column
+    as.data.frame() %>%
+    group_by(region) %>%
+    summarize(total_pop = sum(population))
+
+head(pop_region)
+```
+
+```{r}
+# use left_join() to get info back to the Alaska region shapefile
+pop_region_3338 <- left_join(ak_regions_3338, 
+                             pop_region, 
+                             by = "region")
+
+# plot to check
+plot(pop_region_3338["total_pop"])
+```
+
+```{r}
+pop_mgmt_3338 <- pop_region_3338 %>%
+    group_by(mgmt_area) %>%
+    summarize(total_pop = sum(total_pop), do_union = FALSE)
+
+plot(pop_mgmt_3338["total_pop"])
+```
+
+### Save the spatial object
+```{r}
+write_sf(pop_region_3338, "data/ak_regions_population.shp")
+```
+
+
+## Visualize with ggplot
+```{r}
+ggplot(data = pop_region_3338) +
+    geom_sf(aes(fill = total_pop)) +
+    labs(fill = "Total Population") +
+    scale_fill_continuous(low = "khaki",
+                          high =  "firebrick",
+                          labels = comma) +
+    theme_bw()
+```
+
+```{r}
+# get the rivers
+rivers_3338 <- read_sf("data/ak_rivers_simp.shp")
+st_crs(rivers_3338)
+```
+
+```{r}
+ggplot() +
+  # add population by region
+    geom_sf(data = pop_region_3338, 
+            aes(fill = total_pop)) +
+  # add cities
+    geom_sf(data = pop_3338, 
+            size = 0.5) +
+  # add rivers
+    geom_sf(data = rivers_3338,
+            aes(linewidth = StrOrder)) +
+    scale_linewidth(range = c(0.05, 0.5), 
+                    guide = "none") +
+    labs(title = "Total Population by Alaska Region",
+         fill = "Total Population") +
+    scale_fill_continuous(low = "khaki",
+                          high =  "firebrick",
+                          labels = comma) +
+    theme_bw() 
+```
+
+### Use ggspatial
+```{r}
+# reproject our pop data into OpenStreetMap projection (Psuedo-Mercator)
+pop_3857 <- st_transform(pop_3338, 
+                         crs = 3857)
+```
+
+```{r}
+ggplot(data = pop_3857) +
+    ggspatial::annotation_map_tile(type = "osm", zoom = 4) + # higher zoom values are more detailed 
+    geom_sf(aes(color = population),
+            fill = NA) +
+    scale_color_continuous(low = "darkkhaki",
+                           high =  "firebrick",
+                           labels = comma)
+```
+
+## Using leaflet
+
+```{r}
+epsg3338 <- leaflet::leafletCRS(
+    crsClass = "L.Proj.CRS",
+    code = "EPSG:3338",
+    proj4def =  "+proj=aea +lat_1=55 +lat_2=65 +lat_0=50 +lon_0=-154 +x_0=0 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs",
+    resolutions = 2 ^ (16:7)
+)
+```
+
+```{r}
+st_crs(pop_region_3338)
+```
+
+```{r}
+pop_region_4326 <- pop_region_3338 %>% 
+    st_transform(crs = 4326)
+```
+
+```{r}
+m <- leaflet(options = leafletOptions(crs = epsg3338)) %>%
+    addPolygons(data = pop_region_4326,
+                fillColor = "gray",
+                weight = 1)
+
+m
+```
+
+```{r}
+pal <- colorNumeric(palette = "Reds", domain = pop_region_4326$total_pop)
+
+m <- leaflet(options = leafletOptions(crs = epsg3338)) %>%
+    addPolygons(
+        data = pop_region_4326,
+        fillColor = ~ pal(total_pop),
+        weight = 1,
+        color = "black",
+        fillOpacity = 1,
+        label = ~ region
+    ) %>%
+    addLegend(
+        position = "bottomleft",
+        pal = pal,
+        values = range(pop_region_4326$total_pop),
+        title = "Total Population"
+    )
+
+m
+```
+
+```{r}
+pal <- colorNumeric(palette = "Reds", domain = pop_region_4326$total_pop)
+
+m <- leaflet(options = leafletOptions(crs = epsg3338)) %>%
+    addPolygons(
+        data = pop_region_4326,
+        fillColor = ~ pal(total_pop),
+        weight = 1,
+        color = "black",
+        fillOpacity = 1
+    ) %>%
+    addCircleMarkers(
+        data = pop_4326,
+        lat = ~ lat,
+        lng = ~ lng,
+        radius = ~ log(population / 500),
+        # arbitrary scaling
+        fillColor = "gray",
+        fillOpacity = 1,
+        weight = 0.25,
+        color = "black",
+        label = ~ paste0(pop_4326$city, ", population ", comma(pop_4326$population))
+    ) %>%
+    addLegend(
+        position = "bottomleft",
+        pal = pal,
+        values = range(pop_region_4326$total_pop),
+        title = "Total Population"
+    )
+
+m
+```
+
+
